@@ -6,7 +6,6 @@
     <title>Live Score - Garda Futsal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Tambahan SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         tailwind.config = { theme: { extend: { colors: { neon: '#39ff14', dark: '#121212' } } } }
@@ -15,7 +14,6 @@
 <body class="bg-dark text-white min-h-screen p-4 font-sans relative">
 
     <div class="max-w-md mx-auto">
-        <!-- HEADER DENGAN TOMBOL BACK -->
         <div class="flex justify-between items-start mb-6">
             <button onclick="leaveRoom()" class="text-gray-400 hover:text-white bg-gray-800 px-3 py-1 rounded text-sm transition">&larr; Keluar</button>
             <div class="text-right">
@@ -72,7 +70,6 @@
 
         let currentRoomId = null;
 
-        // FITUR TOMBOL KELUAR
         function leaveRoom() {
             swalDark.fire({
                 title: 'Keluar dari Room?',
@@ -87,11 +84,9 @@
             document.getElementById('content-leaderboard').classList.add('hidden');
             document.getElementById('content-jadwal').classList.add('hidden');
             
-            // Reset styles
             document.getElementById('tab-leaderboard').className = 'flex-1 py-3 font-bold text-gray-400 bg-gray-900 hover:bg-gray-800 transition border-b-2 border-transparent';
             document.getElementById('tab-jadwal').className = 'flex-1 py-3 font-bold text-gray-400 bg-gray-900 hover:bg-gray-800 transition border-b-2 border-transparent';
 
-            // Active styles
             document.getElementById(`content-${tab}`).classList.remove('hidden');
             document.getElementById(`tab-${tab}`).className = 'flex-1 py-3 font-bold text-black bg-neon transition border-b-2 border-neon';
         }
@@ -136,7 +131,12 @@
         }
 
         async function fetchJadwal() {
-            const { data: matches } = await db.from('garda_matches').select('*').eq('room_id', currentRoomId).order('match_number', { ascending: true });
+            // PERBAIKAN: Menarik relasi tabel roster agar pemain bisa melihat siapa 1 tim dengan siapa
+            const { data: matches } = await db.from('garda_matches')
+                .select('*, garda_match_roster(team_side, garda_players(name, position))')
+                .eq('room_id', currentRoomId)
+                .order('match_number', { ascending: true });
+
             if (!matches || matches.length === 0) {
                 document.getElementById('jadwalList').innerHTML = '<div class="text-center text-gray-500 py-10 border border-dashed border-gray-700 rounded-lg">Jadwal belum dikunci oleh Panitia.</div>';
                 return;
@@ -145,29 +145,48 @@
             let html = '';
             matches.forEach(m => {
                 let statusBadge = '';
-                let scoreText = `<span class="text-3xl font-black text-gray-700 italic">VS</span>`;
+                let scoreText = `<span class="text-2xl font-black text-gray-700 italic">VS</span>`;
                 let borderGlow = 'border-gray-800';
 
                 if (m.status === 'completed') {
-                    statusBadge = `<span class="bg-gray-800 text-gray-400 text-xs px-2 py-1 rounded font-bold">SELESAI</span>`;
-                    scoreText = `<span class="text-3xl font-black text-white tracking-widest">${m.score_a} - ${m.score_b}</span>`;
+                    statusBadge = `<span class="bg-gray-800 text-gray-400 text-xs px-2 py-1 rounded font-bold shadow-inner">SELESAI</span>`;
+                    scoreText = `<span class="text-2xl font-black text-white tracking-widest">${m.score_a} - ${m.score_b}</span>`;
                 } else if (m.status === 'active') {
                     statusBadge = `<span class="bg-neon text-black font-bold text-xs px-2 py-1 rounded animate-pulse shadow-[0_0_10px_rgba(57,255,20,0.5)]">BERMAIN</span>`;
                     borderGlow = 'border-neon shadow-[0_0_15px_rgba(57,255,20,0.1)]';
                 } else {
-                    statusBadge = `<span class="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded font-bold">MENUNGGU</span>`;
+                    statusBadge = `<span class="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded font-bold shadow-inner">MENUNGGU</span>`;
+                }
+
+                // Pecah data roster untuk TIM A dan TIM B
+                let teamAHTML = ''; let teamBHTML = '';
+                if(m.garda_match_roster) {
+                    let teamA = m.garda_match_roster.filter(r => r.team_side === 'A');
+                    let teamB = m.garda_match_roster.filter(r => r.team_side === 'B');
+                    const renderPlayer = (p) => {
+                        const isGK = p.garda_players.position === 'gk';
+                        return `<div class="text-[10px] sm:text-xs uppercase ${isGK ? 'text-purple-400' : 'text-gray-400'} font-bold truncate">${p.garda_players.name} ${isGK ? '(GK)' : ''}</div>`;
+                    };
+                    teamAHTML = teamA.map(renderPlayer).join('');
+                    teamBHTML = teamB.map(renderPlayer).join('');
                 }
 
                 html += `
-                <div class="bg-gray-900 border ${borderGlow} rounded-lg p-5 mb-4 relative overflow-hidden">
+                <div class="bg-gray-900 border ${borderGlow} rounded-lg p-4 mb-4 relative overflow-hidden">
                     <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-2">
                         <span class="text-blue-400 font-mono text-sm font-bold tracking-widest">GAME ${m.match_number}</span>
                         ${statusBadge}
                     </div>
-                    <div class="flex justify-between items-center text-center">
-                        <div class="w-2/5"><div class="font-bold text-lg text-gray-300">TIM A</div></div>
-                        <div class="w-1/5">${scoreText}</div>
-                        <div class="w-2/5"><div class="font-bold text-lg text-gray-300">TIM B</div></div>
+                    <div class="flex justify-between items-start text-center">
+                        <div class="w-5/12">
+                            <div class="font-bold text-sm text-gray-300 mb-2 border-b border-gray-700 pb-1">TIM A</div>
+                            <div class="space-y-1">${teamAHTML}</div>
+                        </div>
+                        <div class="w-2/12 pt-4 flex justify-center">${scoreText}</div>
+                        <div class="w-5/12">
+                            <div class="font-bold text-sm text-gray-300 mb-2 border-b border-gray-700 pb-1">TIM B</div>
+                            <div class="space-y-1">${teamBHTML}</div>
+                        </div>
                     </div>
                 </div>`;
             });
