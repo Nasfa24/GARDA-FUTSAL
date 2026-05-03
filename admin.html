@@ -87,10 +87,8 @@
         function copyRoomLink() {
             const codeText = document.getElementById('roomStatus').innerText;
             const code = codeText.replace('KODE:', '').trim();
-            // Menghasilkan link absolut yang akurat untuk Github Pages
             const baseURL = window.location.href.split('admin.html')[0]; 
             const link = `${baseURL}room.html?id=${code}`;
-            
             navigator.clipboard.writeText(link).then(() => {
                 Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Link disalin ke Clipboard!', showConfirmButton: false, timer: 2000, background: '#1f2937', color: '#39ff14' });
             });
@@ -128,7 +126,6 @@
         }
 
         async function fetchPlayers() {
-            // PERBAIKAN BUG: Menghapus sorting created_at yang menyebabkan error silent
             const { data } = await db.from('garda_players').select('*').eq('room_id', currentRoomId);
             if (data) {
                 const list = document.getElementById('playerList');
@@ -199,7 +196,6 @@
                 return;
             }
 
-            // PERBAIKAN: Tarik data roster untuk match ini
             const { data: rosters } = await db.from('garda_match_roster')
                 .select('team_side, garda_players(name, position)')
                 .eq('match_id', match.id);
@@ -222,8 +218,7 @@
             display.innerHTML = `
                 <div class="mb-4 text-blue-400 font-mono tracking-widest bg-blue-900/30 inline-block px-4 py-1 rounded-full border border-blue-800">GAME ${match.match_number}</div>
                 
-                <div class="flex items-start justify-center gap-4 md:gap-12 mb-10 mt-4">
-                    <!-- TIM A -->
+                <div class="flex items-start justify-center gap-4 md:gap-12 mb-8 mt-4">
                     <div class="flex flex-col items-center w-5/12 md:w-1/3">
                         <span class="text-xl md:text-2xl font-black mb-3 text-white tracking-widest border-b-2 border-gray-700 pb-1 w-full text-center">TIM A</span>
                         <input type="number" id="scoreA" value="0" min="0" class="w-20 h-24 md:w-32 md:h-32 text-center text-5xl md:text-6xl font-black bg-black border-4 border-gray-700 rounded-2xl focus:border-neon focus:outline-none focus:ring-4 focus:ring-green-900 transition text-neon shadow-inner mb-4">
@@ -234,7 +229,6 @@
 
                     <div class="text-2xl md:text-3xl font-black text-gray-600 italic mt-12 md:mt-16">VS</div>
 
-                    <!-- TIM B -->
                     <div class="flex flex-col items-center w-5/12 md:w-1/3">
                         <span class="text-xl md:text-2xl font-black mb-3 text-white tracking-widest border-b-2 border-gray-700 pb-1 w-full text-center">TIM B</span>
                         <input type="number" id="scoreB" value="0" min="0" class="w-20 h-24 md:w-32 md:h-32 text-center text-5xl md:text-6xl font-black bg-black border-4 border-gray-700 rounded-2xl focus:border-neon focus:outline-none focus:ring-4 focus:ring-green-900 transition text-white shadow-inner mb-4">
@@ -244,10 +238,58 @@
                     </div>
                 </div>
 
-                <button onclick="submitScore('${match.id}', ${match.match_number})" class="w-full md:w-2/3 mx-auto block bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl transition text-xl shadow-[0_0_20px_rgba(37,99,235,0.4)] border border-blue-400">
-                    Selesai & Update Klasemen
-                </button>
+                <div class="flex flex-col gap-3 w-full md:w-2/3 mx-auto">
+                    <button onclick="submitScore('${match.id}', ${match.match_number})" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)] border border-blue-400">
+                        Selesai & Update Klasemen
+                    </button>
+                    <!-- TOMBOL SWAP PEMAIN -->
+                    <button onclick="openSwapModal('${match.id}')" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl transition border border-gray-600 flex justify-center items-center gap-2">
+                        <span>🔄</span> Swap Pemain (Darurat/Cedera)
+                    </button>
+                </div>
             `;
+        }
+
+        // FUNGSI EMERGENCY SWAP
+        async function openSwapModal(matchId) {
+            swalDark.fire({ title: 'Memuat Roster...', didOpen: () => Swal.showLoading() });
+            
+            const {data: roster} = await db.from('garda_match_roster').select('player_id, garda_players(name)').eq('match_id', matchId);
+            const playingIds = roster.map(r => r.player_id);
+            const {data: allPlayers} = await db.from('garda_players').select('id, name').eq('room_id', currentRoomId);
+            
+            const benched = allPlayers.filter(p => !playingIds.includes(p.id));
+            if(benched.length === 0) return swalDark.fire('Tidak Ada Cadangan', 'Semua pemain sedang bermain di lapangan. Tidak ada yang bisa menggantikan.', 'info');
+            
+            let outOptions = roster.map(r => `<option value="${r.player_id}">${r.garda_players.name}</option>`).join('');
+            let inOptions = benched.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            
+            Swal.close();
+            const { value: formValues } = await Swal.fire({
+                title: 'Emergency Swap',
+                background: '#1f2937', color: '#fff',
+                html: `
+                    <div class="text-left space-y-4 mt-4 text-sm">
+                        <div><label class="text-gray-400 font-bold mb-1 block">Pemain Keluar (Sakit/Pulang):</label>
+                        <select id="swal-out" class="w-full p-3 bg-gray-900 rounded-lg text-red-400 font-bold border border-red-900 focus:outline-none uppercase">${outOptions}</select></div>
+                        
+                        <div><label class="text-gray-400 font-bold mb-1 block">Pemain Masuk (Pengganti):</label>
+                        <select id="swal-in" class="w-full p-3 bg-gray-900 rounded-lg text-neon font-bold border border-green-900 focus:outline-none uppercase">${inOptions}</select></div>
+                        <p class="text-[10px] text-gray-500 italic mt-2 text-center">Poin & statistik match ini akan masuk ke Pemain Pengganti.</p>
+                    </div>
+                `,
+                focusConfirm: false, showCancelButton: true, confirmButtonText: 'Tukar Pemain', confirmButtonColor: '#39ff14',
+                customClass: { confirmButton: 'text-black font-bold px-6 py-2 rounded' },
+                preConfirm: () => { return { outId: document.getElementById('swal-out').value, inId: document.getElementById('swal-in').value } }
+            });
+            
+            if (formValues) {
+                swalDark.fire({title: 'Menukar Posisi...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+                await db.from('garda_match_roster').update({player_id: formValues.inId}).eq('match_id', matchId).eq('player_id', formValues.outId);
+                Swal.close();
+                loadActiveMatch(); 
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Pemain berhasil ditukar!', showConfirmButton: false, timer: 2000, background: '#1f2937', color: '#39ff14' });
+            }
         }
 
         function submitScore(matchId, matchNumber) {

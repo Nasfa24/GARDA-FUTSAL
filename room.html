@@ -15,7 +15,7 @@
 
     <div class="max-w-md mx-auto">
         <div class="flex justify-between items-start mb-6">
-            <button onclick="leaveRoom()" class="text-gray-400 hover:text-white bg-gray-800 px-3 py-1 rounded text-sm transition">&larr; Keluar</button>
+            <button onclick="leaveRoom()" class="text-gray-400 hover:text-white bg-gray-800 px-3 py-1 rounded text-sm transition shadow-md">&larr; Keluar</button>
             <div class="text-right">
                 <h1 class="text-2xl font-black italic tracking-wider">GARDA<span class="text-neon">FUTSAL</span></h1>
                 <div id="roomStatus" class="inline-block bg-gray-800 px-3 py-1 mt-1 rounded text-xs text-neon font-bold border border-gray-700 tracking-widest shadow-inner">
@@ -24,27 +24,30 @@
             </div>
         </div>
 
-        <div class="flex mb-4 border-b border-gray-700 bg-gray-900 rounded-t-lg overflow-hidden">
+        <div class="flex mb-4 border-b border-gray-700 bg-gray-900 rounded-t-lg overflow-hidden shadow-lg">
             <button onclick="switchTab('leaderboard')" id="tab-leaderboard" class="flex-1 py-3 font-bold text-black bg-neon transition border-b-2 border-neon">🏆 KLASEMEN</button>
             <button onclick="switchTab('jadwal')" id="tab-jadwal" class="flex-1 py-3 font-bold text-gray-400 bg-gray-900 hover:bg-gray-800 transition border-b-2 border-transparent">📅 JADWAL</button>
         </div>
 
         <div id="content-leaderboard" class="space-y-6">
+            <!-- KLASEMEN DIGABUNGKAN -->
             <div>
-                <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg">
-                    <div class="bg-gray-800 p-2 text-center text-xs font-bold text-gray-300 uppercase tracking-widest border-b border-gray-700">Top Scorer (Outfield)</div>
+                <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-2xl">
+                    <div class="bg-gray-800 p-3 text-center text-sm font-black text-white uppercase tracking-widest border-b border-gray-700 shadow-inner">
+                        OVERALL LEADERBOARD
+                    </div>
                     <table class="w-full text-left text-sm">
-                        <thead class="bg-black text-gray-500 text-xs"><tr><th class="p-3 w-10 text-center">#</th><th class="p-3">Pemain</th><th class="p-3 text-center">Main</th><th class="p-3 text-center text-neon">Poin</th></tr></thead>
-                        <tbody id="outfieldLeaderboard" class="divide-y divide-gray-800"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div>
-                <div class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg">
-                    <div class="bg-purple-900/30 p-2 text-center text-xs font-bold text-purple-300 uppercase tracking-widest border-b border-gray-700">Golden Glove (Kiper)</div>
-                    <table class="w-full text-left text-sm">
-                        <thead class="bg-black text-gray-500 text-xs"><tr><th class="p-3 w-10 text-center">#</th><th class="p-3">Kiper</th><th class="p-3 text-center">SG</th><th class="p-3 text-center text-yellow-400">Poin</th></tr></thead>
-                        <tbody id="gkLeaderboard" class="divide-y divide-gray-800"></tbody>
+                        <thead class="bg-black text-gray-500 text-xs">
+                            <tr>
+                                <th class="p-3 w-10 text-center">#</th>
+                                <th class="p-3">Pemain</th>
+                                <th class="p-3 text-center" title="Jumlah Main">Main</th>
+                                <th class="p-3 text-center text-neon">Poin</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overallLeaderboard" class="divide-y divide-gray-800">
+                            <!-- Diisi via JS -->
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -111,27 +114,31 @@
         }
 
         async function fetchLeaderboard() {
+            // Mengambil semua pemain dan diurutkan murni berdasarkan poin tertinggi
             const { data: players } = await db.from('garda_players').select('*').eq('room_id', currentRoomId).order('poin_utama', { ascending: false });
+            
             if (players) {
-                const outList = document.getElementById('outfieldLeaderboard');
-                const gkList = document.getElementById('gkLeaderboard');
-                outList.innerHTML = ''; gkList.innerHTML = '';
-                let rankOut = 1, rankGk = 1;
+                const list = document.getElementById('overallLeaderboard');
+                list.innerHTML = '';
+                let rank = 1;
 
                 players.forEach(p => {
-                    if (p.position === 'outfield') {
-                        let rankStyle = rankOut === 1 ? 'text-neon text-xl' : 'text-gray-500';
-                        outList.innerHTML += `<tr class="hover:bg-gray-800 transition border-b border-gray-800/50"><td class="p-3 text-center ${rankStyle} font-black">${rankOut++}</td><td class="p-3 font-bold uppercase tracking-wider">${p.name}</td><td class="p-3 text-center text-gray-400 font-mono">${p.jumlah_main}</td><td class="p-3 text-center font-black text-neon text-xl bg-green-900/10">${p.poin_utama}</td></tr>`;
-                    } else if (p.position === 'gk') {
-                        let rankStyle = rankGk === 1 ? 'text-yellow-400 text-xl' : 'text-gray-500';
-                        gkList.innerHTML += `<tr class="hover:bg-gray-800 transition border-b border-gray-800/50"><td class="p-3 text-center ${rankStyle} font-black">${rankGk++}</td><td class="p-3 font-bold uppercase text-purple-300 tracking-wider">${p.name}</td><td class="p-3 text-center text-gray-400 font-mono">${p.selisih_gol}</td><td class="p-3 text-center font-black text-yellow-400 text-xl bg-yellow-900/10">${p.poin_utama}</td></tr>`;
-                    }
+                    let rankStyle = rank === 1 ? 'text-neon text-xl' : 'text-gray-500';
+                    let posBadge = p.position === 'gk' ? '<span class="text-[9px] bg-purple-900 border border-purple-500 text-purple-200 px-1 py-0.5 rounded ml-2 align-middle shadow-sm">GK</span>' : '';
+                    
+                    list.innerHTML += `
+                        <tr class="hover:bg-gray-800 transition border-b border-gray-800/50">
+                            <td class="p-3 text-center ${rankStyle} font-black">${rank++}</td>
+                            <td class="p-3 font-bold uppercase tracking-wider">${p.name} ${posBadge}</td>
+                            <td class="p-3 text-center text-gray-400 font-mono">${p.jumlah_main}</td>
+                            <td class="p-3 text-center font-black text-neon text-xl bg-green-900/10">${p.poin_utama}</td>
+                        </tr>
+                    `;
                 });
             }
         }
 
         async function fetchJadwal() {
-            // PERBAIKAN: Menarik relasi tabel roster agar pemain bisa melihat siapa 1 tim dengan siapa
             const { data: matches } = await db.from('garda_matches')
                 .select('*, garda_match_roster(team_side, garda_players(name, position))')
                 .eq('room_id', currentRoomId)
@@ -158,14 +165,13 @@
                     statusBadge = `<span class="bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded font-bold shadow-inner">MENUNGGU</span>`;
                 }
 
-                // Pecah data roster untuk TIM A dan TIM B
                 let teamAHTML = ''; let teamBHTML = '';
                 if(m.garda_match_roster) {
                     let teamA = m.garda_match_roster.filter(r => r.team_side === 'A');
                     let teamB = m.garda_match_roster.filter(r => r.team_side === 'B');
                     const renderPlayer = (p) => {
                         const isGK = p.garda_players.position === 'gk';
-                        return `<div class="text-[10px] sm:text-xs uppercase ${isGK ? 'text-purple-400' : 'text-gray-400'} font-bold truncate">${p.garda_players.name} ${isGK ? '(GK)' : ''}</div>`;
+                        return `<div class="text-[10px] sm:text-xs uppercase ${isGK ? 'text-purple-400' : 'text-gray-400'} font-bold truncate">${p.garda_players.name} ${isGK ? '<span class="opacity-70">(GK)</span>' : ''}</div>`;
                     };
                     teamAHTML = teamA.map(renderPlayer).join('');
                     teamBHTML = teamB.map(renderPlayer).join('');
