@@ -20,12 +20,12 @@
             <div id="roomStatus" class="bg-gray-800 px-4 py-2 rounded font-mono text-neon font-bold">KODE: MEMUAT...</div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- PANEL 1: REGISTRASI PEMAIN -->
+        <!-- FASE 1: SETUP & CHECK-IN -->
+        <div id="setupPhase" class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl">
                 <h2 class="text-lg font-bold mb-4 border-b border-gray-700 pb-2 text-blue-400">1. Registrasi Pemain</h2>
                 <div class="flex flex-col gap-3">
-                    <input type="text" id="playerName" placeholder="Nama Pemain" class="p-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-blue-400 focus:outline-none">
+                    <input type="text" id="playerName" placeholder="Nama Pemain" class="p-2 bg-gray-800 border border-gray-700 rounded text-white focus:border-blue-400 focus:outline-none uppercase">
                     <select id="playerPosition" class="p-2 bg-gray-800 border border-gray-700 rounded text-white focus:outline-none">
                         <option value="outfield">Pemain Lapangan (Outfield)</option>
                         <option value="gk">Kiper (GK)</option>
@@ -34,44 +34,43 @@
                 </div>
             </div>
 
-            <!-- PANEL 2: DAFTAR CHECK-IN -->
             <div class="bg-gray-900 border border-gray-800 p-5 rounded-xl md:col-span-2 flex flex-col">
                 <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-4">
                     <h2 class="text-lg font-bold text-neon">2. Roster Hadir (Check-In)</h2>
                     <span id="playerCount" class="text-sm text-gray-400">Total: 0</span>
                 </div>
-                
-                <div id="playerList" class="flex-grow overflow-y-auto max-h-60 space-y-2 mb-4 pr-2">
-                    <!-- List pemain muncul di sini via JS -->
-                </div>
-
-                <!-- PANEL 3: EKSEKUSI ALGORITMA -->
+                <div id="playerList" class="flex-grow overflow-y-auto max-h-60 space-y-2 mb-4 pr-2"></div>
                 <button onclick="generateSchedule()" class="w-full bg-neon text-black font-black py-4 rounded hover:bg-green-400 transition text-lg mt-auto">
                     MULAI ACAK JADWAL OTOMATIS
                 </button>
             </div>
         </div>
+
+        <!-- FASE 2: LIVE MATCH CONTROLLER (Akan muncul setelah jadwal dibuat) -->
+        <div id="playingPhase" class="hidden">
+            <div class="bg-gray-900 border border-gray-800 p-6 rounded-xl text-center">
+                <h2 class="text-xl font-black text-neon mb-6 uppercase tracking-widest border-b border-gray-800 pb-4">Live Controller</h2>
+                
+                <div id="activeMatchDisplay" class="py-10 text-gray-400">
+                    Memuat pertandingan aktif...
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        // INISIALISASI SUPABASE (ARUS)
         const supabaseUrl = 'https://assaxxfdxtycdqkkkgpc.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzc2F4eGZkeHR5Y2Rxa2trZ3BjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMjk4MDQsImV4cCI6MjA5MjYwNTgwNH0.5L3XfA3GOQqIzzNGOBZRTSINqGugDp1sj07BBYpsqEc';
         const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
         let currentRoomId = null;
-        let currentRoomDuration = 120; // Default
+        let currentRoomDuration = 120; 
 
-        // AMBIL DATA ROOM SAAT HALAMAN DIMUAT
         async function initAdmin() {
             const urlParams = new URLSearchParams(window.location.search);
             let roomCode = urlParams.get('id') || localStorage.getItem('garda_admin_room');
-
-            if (!roomCode) {
-                alert("Akses ditolak! Silakan buat room dari halaman depan.");
-                window.location.href = 'index.html';
-                return;
-            }
+            if (!roomCode) { window.location.href = 'index.html'; return; }
 
             document.getElementById('roomStatus').innerText = `KODE: ${roomCode}`;
 
@@ -79,137 +78,165 @@
             if (data) {
                 currentRoomId = data.id;
                 currentRoomDuration = data.total_duration;
-                fetchPlayers();
+                
+                if(data.status === 'playing') {
+                    document.getElementById('setupPhase').classList.add('hidden');
+                    document.getElementById('playingPhase').classList.remove('hidden');
+                    loadActiveMatch();
+                } else {
+                    fetchPlayers();
+                }
             }
         }
 
-        // FUNGSI TAMBAH PEMAIN
         async function addPlayer() {
             const name = document.getElementById('playerName').value.trim();
             const position = document.getElementById('playerPosition').value;
-
             if (!name) return alert("Nama tidak boleh kosong!");
-
-            const { error } = await supabase.from('garda_players').insert([
-                { room_id: currentRoomId, name: name, position: position }
-            ]);
-
-            if (error) console.error(error);
-            else {
-                document.getElementById('playerName').value = '';
-                fetchPlayers();
-            }
+            await supabase.from('garda_players').insert([{ room_id: currentRoomId, name: name, position: position }]);
+            document.getElementById('playerName').value = '';
+            fetchPlayers();
         }
 
-        // FUNGSI TARIK DATA PEMAIN UNTUK CHECK-IN
         async function fetchPlayers() {
-            const { data, error } = await supabase.from('garda_players').select('*').eq('room_id', currentRoomId).order('created_at', { ascending: true });
-            
+            const { data } = await supabase.from('garda_players').select('*').eq('room_id', currentRoomId).order('created_at', { ascending: true });
             if (data) {
                 const list = document.getElementById('playerList');
                 list.innerHTML = '';
                 document.getElementById('playerCount').innerText = `Total: ${data.length}`;
-
                 data.forEach(p => {
                     const color = p.position === 'gk' ? 'bg-purple-900 text-purple-200' : 'bg-gray-800 text-gray-200';
                     const label = p.position === 'gk' ? 'GK' : 'OUT';
-                    list.innerHTML += `
-                        <div class="flex justify-between items-center p-3 rounded border border-gray-700 ${color}">
-                            <span class="font-bold uppercase">${p.name}</span>
-                            <span class="text-xs font-mono px-2 py-1 bg-black rounded border border-gray-600">${label}</span>
-                        </div>
-                    `;
+                    list.innerHTML += `<div class="flex justify-between p-3 rounded border border-gray-700 ${color}"><span class="font-bold uppercase">${p.name}</span><span class="text-xs font-mono px-2 py-1 bg-black rounded">${label}</span></div>`;
                 });
             }
         }
 
-        // ALGORITMA MATCHMAKING OTOMATIS (CORE ENGINE)
         async function generateSchedule() {
-            const btn = document.querySelector('button[onclick="generateSchedule()"]');
-            btn.disabled = true;
-            btn.innerText = "MENGACAK JADWAL...";
-
-            // 1. Ambil semua pemain yang terdaftar
+            document.querySelector('button[onclick="generateSchedule()"]').disabled = true;
             const { data: players } = await supabase.from('garda_players').select('*').eq('room_id', currentRoomId);
             
-            if (players.length < 10) {
-                alert("Pemain minimal 10 orang (8 Outfield + 2 GK) untuk memulai!");
-                btn.disabled = false;
-                btn.innerText = "MULAI ACAK JADWAL OTOMATIS";
-                return;
-            }
+            if (players.length < 10) return alert("Pemain minimal 10 orang (8 Outfield + 2 GK)!");
 
-            // 2. Kalkulasi jumlah pertandingan berdasarkan rumus[cite: 1]
-            // N = floor((Durasi - Buffer 10 mnt) / (Main 7 + Jeda 3))
-            const t_buffer = 10;
-            const t_main = 7;
-            const t_jeda = 3;
-            const totalMatches = Math.floor((currentRoomDuration - t_buffer) / (t_main + t_jeda));
-
-            // Simulasi struktur data di memori sebelum di-push ke database
+            const totalMatches = Math.floor((currentRoomDuration - 10) / 10);
             let localPlayers = JSON.parse(JSON.stringify(players));
             let matchesToInsert = [];
             let rosterToInsert = [];
 
             for (let i = 1; i <= totalMatches; i++) {
-                // Pisahkan Outfield dan GK[cite: 1]
-                let outfield = localPlayers.filter(p => p.position === 'outfield');
-                let gk = localPlayers.filter(p => p.position === 'gk');
+                let outfield = localPlayers.filter(p => p.position === 'outfield').sort((a, b) => a.jumlah_main - b.jumlah_main);
+                let gk = localPlayers.filter(p => p.position === 'gk').sort((a, b) => a.jumlah_main - b.jumlah_main);
 
-                // Prioritas Pemerataan Menit Bermain: Sortir berdasarkan jumlah_main[cite: 1]
-                outfield.sort((a, b) => a.jumlah_main - b.jumlah_main);
-                gk.sort((a, b) => a.jumlah_main - b.jumlah_main);
+                let selOut = outfield.slice(0, 8).sort(() => Math.random() - 0.5);
+                let selGK = gk.slice(0, 2).sort(() => Math.random() - 0.5);
 
-                // Ambil 8 Outfield dan 2 GK
-                let selectedOutfield = outfield.slice(0, 8);
-                let selectedGK = gk.slice(0, 2);
+                const matchId = crypto.randomUUID(); 
+                matchesToInsert.push({ id: matchId, room_id: currentRoomId, match_number: i, status: i === 1 ? 'active' : 'pending' });
 
-                // Acak secara buta (Fisher-Yates) sebelum dibagi ke Tim A dan B[cite: 1]
-                selectedOutfield = selectedOutfield.sort(() => Math.random() - 0.5);
-                selectedGK = selectedGK.sort(() => Math.random() - 0.5);
+                for (let j=0; j<4; j++) rosterToInsert.push({ match_id: matchId, player_id: selOut[j].id, team_side: 'A' });
+                rosterToInsert.push({ match_id: matchId, player_id: selGK[0].id, team_side: 'A' });
 
-                // Catat di struktur memori pertandingan
-                const matchId = crypto.randomUUID(); // Buat ID statis untuk relasi roster
-                matchesToInsert.push({
-                    id: matchId,
-                    room_id: currentRoomId,
-                    match_number: i,
-                    status: i === 1 ? 'active' : 'pending' // Pertandingan pertama langsung aktif
-                });
+                for (let j=4; j<8; j++) rosterToInsert.push({ match_id: matchId, player_id: selOut[j].id, team_side: 'B' });
+                rosterToInsert.push({ match_id: matchId, player_id: selGK[1].id, team_side: 'B' });
 
-                // Masukkan Roster Tim A
-                for (let j=0; j<4; j++) rosterToInsert.push({ match_id: matchId, player_id: selectedOutfield[j].id, team_side: 'A' });
-                rosterToInsert.push({ match_id: matchId, player_id: selectedGK[0].id, team_side: 'A' });
-
-                // Masukkan Roster Tim B
-                for (let j=4; j<8; j++) rosterToInsert.push({ match_id: matchId, player_id: selectedOutfield[j].id, team_side: 'B' });
-                rosterToInsert.push({ match_id: matchId, player_id: selectedGK[1].id, team_side: 'B' });
-
-                // Update jumlah_main di memori lokal untuk iterasi jadwal berikutnya[cite: 1]
-                selectedOutfield.forEach(p => p.jumlah_main += 1);
-                selectedGK.forEach(p => p.jumlah_main += 1);
+                selOut.forEach(p => p.jumlah_main += 1);
+                selGK.forEach(p => p.jumlah_main += 1);
             }
 
-            // 3. Batch Insert ke Supabase
-            // Hapus jadwal lama jika ada (preventif)
             await supabase.from('garda_matches').delete().eq('room_id', currentRoomId);
-            
-            // Insert Matches
             await supabase.from('garda_matches').insert(matchesToInsert);
-            
-            // Insert Roster
             await supabase.from('garda_match_roster').insert(rosterToInsert);
-
-            // Update status room[cite: 1]
             await supabase.from('garda_rooms').update({ status: 'playing' }).eq('id', currentRoomId);
-
-            alert(`Sukses! ${totalMatches} Jadwal Pertandingan telah terbentuk.`);
             
-            // Redirect atau ubah UI ke mode Eksekusi Skor
             window.location.reload(); 
         }
 
-        // Jalankan saat pertama kali dibuka
+        // LOAD MATCH AKTIF UNTUK INPUT SKOR
+        async function loadActiveMatch() {
+            const { data: match } = await supabase.from('garda_matches').select('*').eq('room_id', currentRoomId).eq('status', 'active').single();
+            const display = document.getElementById('activeMatchDisplay');
+
+            if (!match) {
+                display.innerHTML = '<h3 class="text-2xl text-neon">SEMUA PERTANDINGAN SELESAI!</h3>';
+                return;
+            }
+
+            display.innerHTML = `
+                <div class="mb-4 text-gray-500 font-mono tracking-widest">GAME ${match.match_number}</div>
+                <div class="flex items-center justify-center gap-8 mb-8">
+                    <div class="flex flex-col items-center">
+                        <span class="text-2xl font-bold mb-2 text-white">TIM A</span>
+                        <input type="number" id="scoreA" value="0" min="0" class="w-24 h-24 text-center text-5xl font-black bg-gray-800 border-2 border-gray-600 rounded-xl focus:border-neon focus:outline-none">
+                    </div>
+                    <div class="text-4xl font-black text-gray-600">VS</div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-2xl font-bold mb-2 text-white">TIM B</span>
+                        <input type="number" id="scoreB" value="0" min="0" class="w-24 h-24 text-center text-5xl font-black bg-gray-800 border-2 border-gray-600 rounded-xl focus:border-neon focus:outline-none">
+                    </div>
+                </div>
+                <button onclick="submitScore('${match.id}')" class="w-full md:w-1/2 mx-auto block bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl transition text-xl shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+                    SIMPAN SKOR & UPDATE KLASEMEN
+                </button>
+            `;
+        }
+
+        // OTOMATISASI PERHITUNGAN POIN
+        async function submitScore(matchId) {
+            const scoreA = parseInt(document.getElementById('scoreA').value);
+            const scoreB = parseInt(document.getElementById('scoreB').value);
+
+            // 1. Ambil Roster & Data Pemain saat ini
+            const { data: rosters } = await supabase.from('garda_match_roster').select('player_id, team_side, garda_players(position, poin_utama, selisih_gol, jumlah_main)').eq('match_id', matchId);
+
+            let updates = [];
+
+            // 2. Kalkulasi Logika Garda Americano
+            for (let r of rosters) {
+                let pId = r.player_id;
+                let side = r.team_side;
+                let pData = r.garda_players;
+
+                let myTeamScore = side === 'A' ? scoreA : scoreB;
+                let oppTeamScore = side === 'A' ? scoreB : scoreA;
+
+                let newPoin = pData.poin_utama;
+                let newSG = pData.selisih_gol;
+                let newMain = pData.jumlah_main + 1; // Tambah jumlah main nyata
+
+                if (pData.position === 'outfield') {
+                    newPoin += myTeamScore; // Poin gol kolektif
+                    if (oppTeamScore === 0) newPoin += 2; // Bonus Cleansheet
+                } else if (pData.position === 'gk') {
+                    let modal = 2;
+                    let diff = myTeamScore - oppTeamScore;
+                    let csBonus = oppTeamScore === 0 ? 3 : 0;
+                    newPoin += (modal + diff + csBonus);
+                    newSG += diff;
+                }
+
+                updates.push({ id: pId, poin_utama: newPoin, selisih_gol: newSG, jumlah_main: newMain });
+            }
+
+            // 3. Eksekusi Update Pemain (Satu per satu karena format JS Client)
+            for (let u of updates) {
+                await supabase.from('garda_players').update({ poin_utama: u.poin_utama, selisih_gol: u.selisih_gol, jumlah_main: u.jumlah_main }).eq('id', u.id);
+            }
+
+            // 4. Tutup Match Aktif
+            await supabase.from('garda_matches').update({ score_a: scoreA, score_b: scoreB, status: 'completed' }).eq('id', matchId);
+
+            // 5. Aktifkan Match Berikutnya
+            const { data: next } = await supabase.from('garda_matches').select('id').eq('room_id', currentRoomId).eq('status', 'pending').order('match_number', { ascending: true }).limit(1);
+            
+            if (next && next.length > 0) {
+                await supabase.from('garda_matches').update({ status: 'active' }).eq('id', next[0].id);
+            } else {
+                await supabase.from('garda_rooms').update({ status: 'finished' }).eq('id', currentRoomId);
+            }
+
+            loadActiveMatch(); // Refresh Tampilan
+        }
+
         initAdmin();
     </script>
 </body>
