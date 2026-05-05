@@ -68,7 +68,7 @@
         <!-- CONTENT: LEADERBOARD -->
         <div id="content-leaderboard" class="space-y-6">
             <div id="normalLeaderboard" class="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-2xl">
-                <div class="bg-black p-3 text-center text-sm font-black text-gold uppercase tracking-widest border-b border-yellow-900 shadow-inner">AGREGAT SEKOLAH</div>
+                <div class="bg-black p-3 text-center text-sm font-black text-gold uppercase tracking-widest border-b border-yellow-900 shadow-inner">AGREGAT TIM</div>
                 <table class="w-full text-left text-sm"><thead class="bg-gray-900 text-gray-500 text-xs border-b border-gray-800"><tr><th class="p-3 w-12 text-center">#</th><th class="p-3">Almamater</th><th class="p-3 text-center text-gold">Agregat</th></tr></thead><tbody id="normalList" class="divide-y divide-gray-800"></tbody></table>
             </div>
 
@@ -89,7 +89,7 @@
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzc2F4eGZkeHR5Y2Rxa2trZ3BjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMjk4MDQsImV4cCI6MjA5MjYwNTgwNH0.5L3XfA3GOQqIzzNGOBZRTSINqGugDp1sj07BBYpsqEc';
         const db = supabase.createClient(supabaseUrl, supabaseKey);
 
-        let currentRoomId = null; let isBlindModeActive = false; let tourneyStatus = 'waiting';
+        let currentRoomId = null; let isBlindModeActive = false; let tourneyStatus = 'waiting'; let tourneyType = 'klasik';
 
         function leaveRoom() { window.location.href = 'index.html'; }
 
@@ -105,9 +105,9 @@
             if (!code) return leaveRoom();
             document.getElementById('roomStatus').innerText = `ID: ${code}`;
 
-            const { data: roomData } = await db.from('garda_tourney_rooms').select('id, status, blind_mode').eq('room_code', code).single();
+            const { data: roomData } = await db.from('garda_tourney_rooms').select('id, status, blind_mode, tourney_type').eq('room_code', code).single();
             if (roomData) {
-                currentRoomId = roomData.id; tourneyStatus = roomData.status; isBlindModeActive = roomData.blind_mode;
+                currentRoomId = roomData.id; tourneyStatus = roomData.status; isBlindModeActive = roomData.blind_mode; tourneyType = roomData.tourney_type;
                 
                 if (tourneyStatus === 'finished') {
                     isBlindModeActive = false; document.getElementById('podiumArea').classList.remove('hidden'); shootConfetti();
@@ -137,9 +137,40 @@
             const { data: schools } = await db.from('garda_tourney_schools').select('id, name, total_points, garda_tourney_players(poin_individu)').eq('room_id', currentRoomId);
             if (!schools || schools.length === 0) return;
 
+            // 1. Sortir Mutlak Agregat Normal & Tie-Breaker Ace Carrier
             schools.forEach(s => { s.max_poin = Math.max(...s.garda_tourney_players.map(p => p.poin_individu), 0); });
-            schools.sort((a, b) => b.total_points - a.total_points || b.max_poin - a.max_poin); // Sortir Tie-Breaker (Ace Carrier)
+            schools.sort((a, b) => b.total_points - a.total_points || b.max_poin - a.max_poin); 
 
+            // 2. OVERRIDE WINNER-TAKES-ALL GRAND FINAL
+            if (tourneyStatus === 'finished' && tourneyType === 'grand_final') {
+                const { data: gfMatch } = await db.from('garda_tourney_matches')
+                    .select('score_a, score_b, garda_tourney_match_roster(team_side, garda_tourney_players(school_id))')
+                    .eq('room_id', currentRoomId).eq('match_type', 'grand_final').single();
+
+                if (gfMatch) {
+                    let winnerSide = null;
+                    if (gfMatch.score_a > gfMatch.score_b) winnerSide = 'A';
+                    else if (gfMatch.score_b > gfMatch.score_a) winnerSide = 'B';
+
+                    // Jika ada pemenang mutlak (bukan seri), paksa posisinya ke ranking 1 & 2
+                    if (winnerSide) {
+                        let wId = gfMatch.garda_tourney_match_roster.find(r => r.team_side === winnerSide).garda_tourney_players.school_id;
+                        let lId = gfMatch.garda_tourney_match_roster.find(r => r.team_side !== winnerSide).garda_tourney_players.school_id;
+
+                        let wIndex = schools.findIndex(s => s.id === wId);
+                        let wSchool = wIndex > -1 ? schools.splice(wIndex, 1)[0] : null;
+
+                        let lIndex = schools.findIndex(s => s.id === lId);
+                        let lSchool = lIndex > -1 ? schools.splice(lIndex, 1)[0] : null;
+
+                        // Sisipkan berurutan: Kalah di rank 2, Menang di rank 1
+                        if (lSchool) schools.unshift(lSchool); 
+                        if (wSchool) schools.unshift(wSchool); 
+                    }
+                }
+            }
+
+            // Eksekusi Tampilan (Podium, Blind Mode, atau Klasemen Normal)
             if (tourneyStatus === 'finished') {
                 document.getElementById('j1-name').innerText = schools[0]?.name || '---'; document.getElementById('j1-pts').innerText = (schools[0]?.total_points || 0) + ' PT';
                 document.getElementById('j2-name').innerText = schools[1]?.name || '---'; document.getElementById('j2-pts').innerText = (schools[1]?.total_points || 0) + ' PT';
@@ -147,7 +178,6 @@
             }
 
             if (isBlindModeActive && tourneyStatus !== 'finished') {
-                // Kalkulasi Dinamis 40-40-20
                 let total = schools.length;
                 let cTop = Math.max(2, Math.round(total * 0.40));
                 let cBot = Math.max(1, Math.round(total * 0.20));
@@ -166,7 +196,9 @@
                 schools.forEach(s => {
                     let rStyle = rank === 1 ? 'text-gold text-2xl' : rank === 2 ? 'text-gray-300 text-xl' : rank === 3 ? 'text-orange-400 text-lg' : 'text-gray-600';
                     let bgGlow = rank === 1 ? 'bg-yellow-900/10 border-l-4 border-gold' : 'border-l-4 border-transparent';
-                    html += `<tr class="hover:bg-gray-800 transition ${bgGlow}"><td class="p-3 text-center ${rStyle} font-black">${rank++}</td><td class="p-3 font-bold uppercase text-gray-200">${s.name}</td><td class="p-3 text-center font-black text-gold text-xl bg-yellow-900/20">${s.total_points}</td></tr>`;
+                    // Tambahkan logo 🏆 khusus untuk tim GF yg menang (sekalipun poinnya lebih kecil)
+                    let piala = (tourneyStatus === 'finished' && tourneyType === 'grand_final' && rank === 1) ? ' 🏆' : '';
+                    html += `<tr class="hover:bg-gray-800 transition ${bgGlow}"><td class="p-3 text-center ${rStyle} font-black">${rank++}</td><td class="p-3 font-bold uppercase text-gray-200">${s.name}${piala}</td><td class="p-3 text-center font-black text-gold text-xl bg-yellow-900/20">${s.total_points}</td></tr>`;
                 });
                 document.getElementById('normalList').innerHTML = html;
             }
