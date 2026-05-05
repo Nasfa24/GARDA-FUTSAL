@@ -28,14 +28,14 @@
             </div>
         </div>
 
-        <!-- FASE SETUP (REGISTRASI SEKOLAH) -->
+        <!-- FASE SETUP (REGISTRASI TIM) -->
         <div id="setupPhase" class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Form Input -->
             <div class="bg-gray-900 border border-yellow-900/50 p-6 rounded-xl shadow-2xl relative overflow-hidden">
-                <div class="absolute top-0 right-0 bg-yellow-600 text-black text-[10px] font-black px-3 py-1 rounded-bl-lg">ROSTER SEKOLAH</div>
+                <div class="absolute top-0 right-0 bg-yellow-600 text-black text-[10px] font-black px-3 py-1 rounded-bl-lg">ROSTER TIM</div>
                 <h2 class="text-lg font-bold mb-4 border-b border-gray-800 pb-2 text-gold">1. Registrasi Kontingen</h2>
                 
-                <input type="text" id="schoolName" placeholder="NAMA SEKOLAH / ALMAMATER" class="w-full p-3 mb-4 bg-black border border-yellow-700 rounded text-gold focus:border-yellow-400 focus:outline-none uppercase font-black text-center text-lg shadow-inner placeholder-gray-700">
+                <input type="text" id="schoolName" placeholder="NAMA TIM" class="w-full p-3 mb-4 bg-black border border-yellow-700 rounded text-gold focus:border-yellow-400 focus:outline-none uppercase font-black text-center text-lg shadow-inner placeholder-gray-700">
                 
                 <div class="space-y-3 mb-6">
                     <div class="flex gap-2">
@@ -148,7 +148,7 @@
                 document.getElementById('bench2').value.trim().toUpperCase()
             ];
 
-            if (!sName || names.includes('')) return swalDark.fire('Data Belum Lengkap', 'Nama sekolah dan kelima slot pemain wajib diisi!', 'warning');
+            if (!sName || names.includes('')) return swalDark.fire('Data Belum Lengkap', 'Nama Tim dan kelima slot pemain wajib diisi!', 'warning');
             swalDark.fire({ title: 'Menyimpan Kontingen...', didOpen: () => Swal.showLoading() });
 
             const { data: sch } = await db.from('garda_tourney_schools').insert([{ room_id: currentRoom.id, name: sName }]).select().single();
@@ -168,7 +168,7 @@
         async function deleteSchool(id) {
             Swal.fire({
                 title: 'Hapus Kontingen?',
-                text: "Data sekolah dan seluruh pemainnya akan dihapus permanen.",
+                text: "Data Tim dan seluruh pemainnya akan dihapus permanen.",
                 icon: 'warning', background: '#121212', color: '#fff',
                 showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#374151', confirmButtonText: 'Ya, Hapus'
             }).then(async (result) => {
@@ -228,7 +228,7 @@
                 
                 const confirmWarning = await swalDark.fire({
                     title: '⚠️ Peringatan Cerdas',
-                    html: `Dengan <b>${schools.length} tim</b> dan waktu sewa <b>${currentRoom.total_duration} Menit</b>, setiap sekolah rata-rata hanya bertanding <b>${avgMatches.toFixed(1)} kali</b>.<br><br><span class="text-sm text-gray-400">Mesin menyarankan total durasi sewa ditingkatkan menjadi <b>${idealDuration} Menit</b>.</span>`,
+                    html: `Dengan <b>${schools.length} tim</b> dan waktu sewa <b>${currentRoom.total_duration} Menit</b>, setiap tim rata-rata hanya bertanding <b>${avgMatches.toFixed(1)} kali</b>.<br><br><span class="text-sm text-gray-400">Mesin menyarankan total durasi sewa ditingkatkan menjadi <b>${idealDuration} Menit</b>.</span>`,
                     icon: 'warning', showCancelButton: true, 
                     confirmButtonText: `Tingkatkan ke ${idealDuration} Menit`, 
                     cancelButtonText: `Tetap ${currentRoom.total_duration} Menit`,
@@ -368,7 +368,7 @@
                 }
             }
 
-            if(htmlOptions === '') return swalDark.fire('Info', 'Tidak ada pemain cadangan yang tersedia untuk sekolah yang sedang bertanding.', 'info');
+            if(htmlOptions === '') return swalDark.fire('Info', 'Tidak ada pemain cadangan yang tersedia untuk tim yang sedang bertanding.', 'info');
 
             Swal.fire({
                 title: 'Strategi Rotasi', background: '#1f2937', color: '#fff', html: `<div class="max-h-60 overflow-y-auto">${htmlOptions}</div>`,
