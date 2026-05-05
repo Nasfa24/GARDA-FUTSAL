@@ -90,13 +90,23 @@
         const supabaseUrl = 'https://assaxxfdxtycdqkkkgpc.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzc2F4eGZkeHR5Y2Rxa2trZ3BjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMjk4MDQsImV4cCI6MjA5MjYwNTgwNH0.5L3XfA3GOQqIzzNGOBZRTSINqGugDp1sj07BBYpsqEc';
         const db = supabase.createClient(supabaseUrl, supabaseKey);
-        const swalDark = Swal.mixin({ background: '#121212', color: '#fff', confirmButtonColor: '#FFD700', customClass: { confirmButton: 'text-black font-bold px-6 py-2 rounded' } });
+        const swalDark = Swal.mixin({ background: '#121212', color: '#fff', confirmButtonColor: '#FFD700', customClass: { confirmButton: 'text-black font-bold px-6 py-2 rounded', cancelButton: 'font-bold px-6 py-2 rounded bg-red-600 hover:bg-red-500 text-white ml-2' } });
 
         let currentRoom = null;
         let totalMatches = 0;
         let saranWaktuTanding = 7;
 
-        function goBack() { window.location.href = 'index.html'; }
+        function goBack() { 
+            Swal.fire({
+                title: 'Yakin ingin keluar?',
+                text: 'Turnamen akan tetap berjalan di server. Pastikan Anda mengingat Kode Turnamen!',
+                icon: 'warning', background: '#121212', color: '#fff',
+                showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#374151',
+                confirmButtonText: 'Ya, Keluar'
+            }).then((result) => {
+                if (result.isConfirmed) { window.location.href = 'index.html'; }
+            });
+        }
 
         function copyTourneyLink() {
             const codeText = document.getElementById('roomStatus').innerText.replace('KODE: ', '').trim();
@@ -108,7 +118,7 @@
 
         async function initAdmin() {
             const code = new URLSearchParams(window.location.search).get('id') || localStorage.getItem('garda_tourney_admin');
-            if (!code) return goBack();
+            if (!code) return window.location.href = 'index.html';
             
             document.getElementById('roomStatus').innerText = `KODE: ${code}`;
             const { data } = await db.from('garda_tourney_rooms').select('*').eq('room_code', code).single();
@@ -116,7 +126,7 @@
             if (data) {
                 currentRoom = data;
                 totalMatches = Math.floor((currentRoom.total_duration - 10) / 10);
-                saranWaktuTanding = Math.floor((currentRoom.total_duration - 10) / totalMatches); // Hitung saran waktu per match
+                saranWaktuTanding = Math.floor((currentRoom.total_duration - 10) / totalMatches);
                 
                 if (currentRoom.status !== 'waiting') {
                     document.getElementById('setupPhase').classList.add('hidden');
@@ -128,11 +138,14 @@
         }
 
         async function addSchool() {
-            const sName = document.getElementById('schoolName').value.trim();
+            // Force uppercase murni sejak dari input
+            const sName = document.getElementById('schoolName').value.trim().toUpperCase();
             const names = [
-                document.getElementById('gkName').value.trim(), document.getElementById('out1').value.trim(), 
-                document.getElementById('out2').value.trim(), document.getElementById('bench1').value.trim(), 
-                document.getElementById('bench2').value.trim()
+                document.getElementById('gkName').value.trim().toUpperCase(), 
+                document.getElementById('out1').value.trim().toUpperCase(), 
+                document.getElementById('out2').value.trim().toUpperCase(), 
+                document.getElementById('bench1').value.trim().toUpperCase(), 
+                document.getElementById('bench2').value.trim().toUpperCase()
             ];
 
             if (!sName || names.includes('')) return swalDark.fire('Data Belum Lengkap', 'Nama sekolah dan kelima slot pemain wajib diisi!', 'warning');
@@ -152,6 +165,22 @@
             Swal.close(); fetchSchools();
         }
 
+        async function deleteSchool(id) {
+            Swal.fire({
+                title: 'Hapus Kontingen?',
+                text: "Data sekolah dan seluruh pemainnya akan dihapus permanen.",
+                icon: 'warning', background: '#121212', color: '#fff',
+                showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#374151', confirmButtonText: 'Ya, Hapus'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    swalDark.fire({ title: 'Menghapus...', didOpen: () => Swal.showLoading() });
+                    await db.from('garda_tourney_schools').delete().eq('id', id);
+                    fetchSchools();
+                    Swal.close();
+                }
+            });
+        }
+
         async function fetchSchools() {
             const { data: schools } = await db.from('garda_tourney_schools').select('id, name, garda_tourney_players(name, position, status_squad)').eq('room_id', currentRoom.id);
             const list = document.getElementById('schoolList'); list.innerHTML = '';
@@ -160,7 +189,7 @@
             const btnAcak = document.getElementById('btnAcak');
             if (schools.length >= 4) {
                 btnAcak.className = "w-full bg-gold text-black font-black py-4 rounded-lg hover:bg-yellow-400 transition shadow-[0_0_15px_rgba(255,215,0,0.4)] shadow-lg";
-                btnAcak.innerText = "MULAI ACAK JADWAL TURNAMEN!";
+                btnAcak.innerText = "KUNCI & ACAK JADWAL TURNAMEN!";
             }
 
             schools.forEach(s => {
@@ -168,7 +197,14 @@
                     let color = p.position === 'gk' ? 'text-purple-400' : (p.status_squad === 'starter' ? 'text-green-400' : 'text-gray-500');
                     return `<span class="text-[10px] ${color} mr-2">${p.name}</span>`;
                 }).join('');
-                list.innerHTML += `<div class="bg-black border border-gray-700 p-3 rounded-lg"><div class="font-bold text-gold uppercase tracking-wider mb-1 border-b border-gray-800 pb-1">${s.name}</div><div class="truncate">${pList}</div></div>`;
+                list.innerHTML += `
+                    <div class="bg-black border border-gray-700 p-3 rounded-lg flex justify-between items-start">
+                        <div class="flex-grow">
+                            <div class="font-bold text-gold uppercase tracking-wider mb-1 border-b border-gray-800 pb-1">${s.name}</div>
+                            <div class="truncate">${pList}</div>
+                        </div>
+                        <button onclick="deleteSchool('${s.id}')" class="text-red-500 hover:text-red-400 ml-3 text-lg bg-red-900/20 p-2 rounded transition" title="Hapus">🗑️</button>
+                    </div>`;
             });
         }
 
@@ -176,16 +212,38 @@
             const { data: schools } = await db.from('garda_tourney_schools').select('id, garda_tourney_players(id, position, status_squad)').eq('room_id', currentRoom.id);
             if (schools.length < 4) return swalDark.fire('Belum Lengkap!', 'Turnamen membutuhkan minimal 4 Tim.', 'error');
 
-            // Cek Smart Warning (Minimal Rata-rata 4 kali main)
+            // Double Confirmation Point of No Return
+            const confirmLock = await swalDark.fire({
+                title: 'KUNCI JADWAL?',
+                html: '<span class="text-red-400 font-bold">Tindakan ini tidak bisa dibatalkan!</span><br><br>Sistem akan mulai membuat arsitektur turnamen. Pastikan tidak ada lagi <i>typo</i> atau penambahan kontingen.',
+                icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Kunci & Acak!', cancelButtonText: 'Cek Lagi'
+            });
+            if(!confirmLock.isConfirmed) return;
+
+            // Smart Warning Upgrade Time
             const avgMatches = (totalMatches * 4) / schools.length;
             if (avgMatches < 4) {
-                let idealDuration = Math.ceil(((schools.length * 10) + 10) / 60) * 60; // Dibulatkan ke kelipatan 60 terdekat yang masuk akal
+                let idealDuration = Math.ceil(((schools.length * 10) + 10) / 60) * 60; 
+                let newTotalMatches = Math.floor((idealDuration - 10) / 10);
+                
                 const confirmWarning = await swalDark.fire({
                     title: '⚠️ Peringatan Cerdas',
-                    html: `Dengan <b>${schools.length} tim</b> dan waktu sewa <b>${currentRoom.total_duration} Menit</b>, setiap sekolah rata-rata hanya bertanding <b>${avgMatches.toFixed(1)} kali</b>.<br><br><span class="text-sm text-gray-400">Mesin menyarankan total durasi sewa ditingkatkan menjadi <b>${idealDuration} Menit</b> agar peserta bisa main minimal 4 kali.</span>`,
-                    icon: 'warning', showCancelButton: true, confirmButtonText: 'Abaikan & Lanjut Acak', cancelButtonText: 'Batal (Ubah Waktu)'
+                    html: `Dengan <b>${schools.length} tim</b> dan waktu sewa <b>${currentRoom.total_duration} Menit</b>, setiap sekolah rata-rata hanya bertanding <b>${avgMatches.toFixed(1)} kali</b>.<br><br><span class="text-sm text-gray-400">Mesin menyarankan total durasi sewa ditingkatkan menjadi <b>${idealDuration} Menit</b>.</span>`,
+                    icon: 'warning', showCancelButton: true, 
+                    confirmButtonText: `Tingkatkan ke ${idealDuration} Menit`, 
+                    cancelButtonText: `Tetap ${currentRoom.total_duration} Menit`,
+                    cancelButtonColor: '#ef4444' // Warna merah untuk tombol abaikan (tetap)
                 });
-                if(!confirmWarning.isConfirmed) return;
+
+                if(confirmWarning.isConfirmed) {
+                    // Inject database dengan waktu baru
+                    await db.from('garda_tourney_rooms').update({ total_duration: idealDuration }).eq('id', currentRoom.id);
+                    currentRoom.total_duration = idealDuration;
+                    totalMatches = newTotalMatches;
+                } else if (confirmWarning.dismiss !== Swal.DismissReason.cancel) {
+                    // Jika panitia klik di luar popup (backdrop), batalkan eksekusi
+                    return;
+                }
             }
 
             swalDark.fire({ title: 'Membangun Arsitektur Turnamen...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -314,7 +372,7 @@
 
             Swal.fire({
                 title: 'Strategi Rotasi', background: '#1f2937', color: '#fff', html: `<div class="max-h-60 overflow-y-auto">${htmlOptions}</div>`,
-                showCancelButton: true, confirmButtonText: 'Terapkan Rotasi', confirmButtonColor: '#FFD700',
+                showCancelButton: true, confirmButtonText: 'Terapkan Rotasi', confirmButtonColor: '#FFD700', cancelButtonColor: '#374151',
                 preConfirm: () => {
                     let swaps = [];
                     schoolIds.forEach(sId => {
@@ -342,7 +400,7 @@
             swalDark.fire({
                 title: 'Validasi Hasil Akhir',
                 html: `Skor Akhir:<br><b class="text-4xl text-gold mt-2 block">A: ${scoreA} - B: ${scoreB}</b>`,
-                icon: 'warning', showCancelButton: true, confirmButtonText: 'Kunci Hasil', cancelButtonText: 'Revisi'
+                icon: 'warning', showCancelButton: true, confirmButtonText: 'Kunci Hasil', cancelButtonText: 'Revisi', cancelButtonColor: '#374151'
             }).then(async (result) => {
                 if (result.isConfirmed) {
                     swalDark.fire({ title: 'Mengkalkulasi Agregat...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
